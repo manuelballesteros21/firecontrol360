@@ -10,7 +10,12 @@ const pool = enabled ? new Pool({ connectionString: process.env.DATABASE_URL, ma
 test('RLS isolates tenant A from tenant B equipment', { skip: enabled ? false : `Set ${missing.join(', ')} for integration test` }, async () => {
   const client = await pool!.connect();
   try {
+    const role = await client.query('SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user');
+    assert.equal(role.rows[0]?.rolbypassrls, false, 'runtime database role must not have BYPASSRLS');
     await client.query('BEGIN');
+    await client.query("SELECT set_config('app.tenant_id', $1, true)", [process.env.TENANT_B_ID]);
+    const fixture = await client.query('SELECT id FROM equipment WHERE id = $1', [process.env.EQUIPMENT_B_ID]);
+    assert.equal(fixture.rowCount, 1, 'test fixture must belong to tenant B and be visible in its own tenant context');
     await client.query("SELECT set_config('app.tenant_id', $1, true)", [process.env.TENANT_A_ID]);
     const read = await client.query('SELECT id FROM equipment WHERE id = $1', [process.env.EQUIPMENT_B_ID]);
     assert.equal(read.rowCount, 0, 'tenant A must not read tenant B equipment');
