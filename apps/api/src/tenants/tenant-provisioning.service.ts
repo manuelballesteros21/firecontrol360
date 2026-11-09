@@ -83,7 +83,7 @@ export class TenantProvisioningService {
     return {
       tenant,
       administrator: { email: adminEmail, full_name: adminFullName, status: 'INVITED', role: 'TENANT_ADMIN' },
-      invitation: { delivery: 'QUEUED', expires_in_hours: 48, acceptance_url: acceptanceUrl, warning: 'El correo quedó en cola; su entrega depende de la configuración SMTP y del worker de notificaciones.' },
+      invitation: { delivery: 'QUEUED', expires_in_hours: 48, warning: 'El correo quedó en cola; su entrega depende de la configuración SMTP y del worker de notificaciones.' },
     };
   }
 }
