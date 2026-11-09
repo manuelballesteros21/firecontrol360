@@ -1,5 +1,7 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { TenantAuthGuard } from './tenant-auth.guard';
+import { AuthenticatedUser } from './auth.types';
 
 @Controller()
 export class AuthController {
@@ -8,6 +10,12 @@ export class AuthController {
   @Post('auth/login')
   tenantLogin(@Body() body: { tenant_id: string; email: string; password: string }) {
     return this.auth.tenantLogin(body);
+  }
+
+  @Get('auth/me')
+  @UseGuards(TenantAuthGuard)
+  me(@Req() request: { user: AuthenticatedUser }) {
+    return { user_id: request.user.sub, tenant_id: request.user.tenantId, roles: request.user.roles };
   }
 
   @Post('platform/auth/login')
