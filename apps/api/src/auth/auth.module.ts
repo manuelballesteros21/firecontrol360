@@ -11,7 +11,7 @@ import { TenantAdminGuard } from './tenant-admin.guard';
     useFactory: () => {
       const secret = process.env.JWT_SECRET;
       if (!secret || secret.length < 32) throw new Error('JWT_SECRET must contain at least 32 characters');
-      return { secret, signOptions: { expiresIn: process.env.JWT_EXPIRES_IN ?? '15m' } };
+      return { secret, signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN ?? '15m') as any } };
     },
   })],
   controllers: [AuthController],
