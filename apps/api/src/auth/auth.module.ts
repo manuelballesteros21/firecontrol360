@@ -4,6 +4,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { TenantAuthGuard } from './tenant-auth.guard';
 import { PlatformAdminGuard } from './platform-admin.guard';
+import { TenantAdminGuard } from './tenant-admin.guard';
 
 @Module({
   imports: [JwtModule.registerAsync({
@@ -14,7 +15,7 @@ import { PlatformAdminGuard } from './platform-admin.guard';
     },
   })],
   controllers: [AuthController],
-  providers: [AuthService, TenantAuthGuard, PlatformAdminGuard],
-  exports: [AuthService, TenantAuthGuard, PlatformAdminGuard],
+  providers: [AuthService, TenantAuthGuard, PlatformAdminGuard, TenantAdminGuard],
+  exports: [AuthService, TenantAuthGuard, PlatformAdminGuard, TenantAdminGuard],
 })
 export class AuthModule {}
