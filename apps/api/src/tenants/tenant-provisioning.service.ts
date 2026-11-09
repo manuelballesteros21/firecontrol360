@@ -90,10 +90,11 @@ export class TenantProvisioningService {
       tenant,
       administrator: { email: adminEmail, status: 'INVITED', role: 'TENANT_ADMIN' },
       invitation: {
-        url: `${baseUrl}/invitations/accept?token=${rawToken}`,
+        token: rawToken,
+        acceptance_endpoint: 'POST /api/v1/invitations/accept',
         expires_in_hours: 48,
-        delivery: 'MANUAL_ONE_TIME_LINK',
-        warning: 'El enlace se muestra una sola vez. Compártelo por un canal seguro; el envío automático de correo se integrará con el outbox.',
+        delivery: 'MANUAL_ONE_TIME_TOKEN',
+        warning: 'El token se muestra una sola vez. Compártelo por un canal seguro; la pantalla web y el envío automático de correo están pendientes.',
       },
     };
   }
