@@ -3,11 +3,12 @@ import type { Response } from 'express';
 import PDFDocument = require('pdfkit');
 import * as QRCode from 'qrcode';
 import { TenantAuthGuard } from '../auth/tenant-auth.guard';
+import { TenantAdminGuard } from '../auth/tenant-admin.guard';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { EquipmentService } from './equipment.service';
 
 @Controller('equipment')
-@UseGuards(TenantAuthGuard)
+@UseGuards(TenantAuthGuard, TenantAdminGuard)
 export class EquipmentController {
   constructor(private readonly equipment: EquipmentService) {}
 
