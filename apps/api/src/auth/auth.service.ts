@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { DatabaseService } from '../database/database.service';
 
 @Injectable()
@@ -56,7 +56,7 @@ export class AuthService {
     const tokenHash = createHash('sha256').update(input.token).digest('hex');
     const invite = await this.db.platformQuery(
       `SELECT id, tenant_id, email FROM user_invitations
-       WHERE token_hash = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+       WHERE token_hash = $1 AND status = 'PENDING' AND expires_at > now()
        LIMIT 1`,
       [tokenHash],
     );
@@ -65,7 +65,7 @@ export class AuthService {
     return this.db.withProvisioning(async client => {
       const locked = await client.query(
         `SELECT id, tenant_id, email FROM user_invitations
-         WHERE id = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+         WHERE id = $1 AND status = 'PENDING' AND expires_at > now()
          FOR UPDATE`,
         [invite.rows[0].id],
       );
@@ -80,7 +80,9 @@ export class AuthService {
       );
       if (userResult.rowCount !== 1) throw new BadRequestException('Invited user was not found or is no longer eligible');
       await client.query(
-        'UPDATE user_invitations SET accepted_at = now(), accepted_by_user_id = $1 WHERE id = $2',
+        `UPDATE user_invitations
+         SET status = 'ACCEPTED', accepted_at = now(), accepted_by_user_id = $1
+         WHERE id = $2`,
         [userResult.rows[0].id, row.id],
       );
       const user = userResult.rows[0];
