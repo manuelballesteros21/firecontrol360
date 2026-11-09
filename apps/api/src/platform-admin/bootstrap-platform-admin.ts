@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import 'reflect-metadata';
 import { Pool } from 'pg';
 import * as argon2 from 'argon2';
