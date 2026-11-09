@@ -1,9 +1,12 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { S3Client, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { Injectable, InternalServerErrorException, OnModuleInit } from '@nestjs/common';
+import {
+  S3Client, HeadObjectCommand, PutObjectCommand,
+  HeadBucketCommand, CreateBucketCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
-export class StorageService {
+export class StorageService implements OnModuleInit {
   private readonly client: S3Client;
   readonly bucket: string;
 
@@ -21,6 +24,18 @@ export class StorageService {
       forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
       credentials: { accessKeyId, secretAccessKey },
     });
+  }
+
+  async onModuleInit() {
+    try {
+      await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+    } catch {
+      try {
+        await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
+      } catch {
+        throw new Error('Object storage bucket is unavailable; verify S3 credentials and bucket permissions');
+      }
+    }
   }
 
   async presignPhoto(input: { key: string; mimeType: string; checksum: string }) {
