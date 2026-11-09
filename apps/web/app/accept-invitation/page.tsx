@@ -1,9 +1,9 @@
 'use client';
-import { FormEvent, useState } from 'react';
+import { FormEvent, Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
-export default function AcceptInvitationPage() {
+function AcceptInvitationForm() {
   const params = useSearchParams();
   const token = params.get('token') ?? '';
   const [password,setPassword] = useState('');
@@ -30,3 +30,5 @@ export default function AcceptInvitationPage() {
   }
   return <main className="shell"><div className="brand">FIRECONTROL 360</div><section className="panel" style={{maxWidth:520,margin:'70px auto'}}><h1>Aceptar invitación</h1><p className="muted">Define una contraseña segura para activar tu acceso a la empresa.</p>{done ? <><p className="success">{message}</p><a className="button" href="/">Ir al inventario</a></> : <form onSubmit={submit}><label>Nueva contraseña</label><input type="password" autoComplete="new-password" minLength={12} required value={password} onChange={e=>setPassword(e.target.value)} /><label>Confirmar contraseña</label><input type="password" autoComplete="new-password" minLength={12} required value={confirm} onChange={e=>setConfirm(e.target.value)} /><p className="muted">Mínimo 12 caracteres. El enlace es de un solo uso y vence a las 48 horas.</p><button disabled={busy || !token}>{busy?'Activando…':'Activar cuenta'}</button>{message && <p className="error" role="alert">{message}</p>}</form>}</section></main>;
 }
+
+export default function AcceptInvitationPage() { return <Suspense fallback={<main className="shell">Cargando invitación…</main>}><AcceptInvitationForm /></Suspense>; }
