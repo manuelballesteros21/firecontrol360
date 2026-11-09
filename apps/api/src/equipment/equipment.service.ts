@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DatabaseService } from '../database/database.service';
 import { StorageService } from '../storage/storage.service';
@@ -60,7 +60,7 @@ export class EquipmentService {
   }
 
   async createInitialPhotoUpload(tenantId: string, userId: string, equipmentId: string, input: {
-    mime_type: string; size_bytes: number; checksum_sha256: string;
+    mime_type: string; size_bytes: number; checksum_sha256: string; idempotency_key: string;
   }) {
     if (!ALLOWED_MIME.has(input.mime_type)) throw new BadRequestException('Only JPEG, PNG or WebP images are accepted');
     if (!Number.isInteger(input.size_bytes) || input.size_bytes < 1 || input.size_bytes > MAX_PHOTO_BYTES) {
@@ -68,6 +68,9 @@ export class EquipmentService {
     }
     if (!/^[a-fA-F0-9]{64}$/.test(input.checksum_sha256 ?? '')) {
       throw new BadRequestException('checksum_sha256 must be a SHA-256 hex digest');
+    }
+    if (!input.idempotency_key?.trim() || input.idempotency_key.length > 180) {
+      throw new BadRequestException('idempotency_key is required and must be at most 180 characters');
     }
     return this.db.withTenant(tenantId, async client => {
       const equipment = await client.query(
@@ -78,15 +81,48 @@ export class EquipmentService {
       if (equipment.rows[0].status !== 'PENDING_PHOTO') {
         throw new BadRequestException('Initial photo can only be uploaded while equipment is PENDING_PHOTO');
       }
+
+      const existing = await client.query(
+        `SELECT id, object_key, expected_mime_type, expected_size_bytes, expected_checksum_sha256, status, expires_at
+         FROM equipment_photo_uploads
+         WHERE tenant_id = $1 AND idempotency_key = $2
+         FOR UPDATE`,
+        [tenantId, input.idempotency_key],
+      );
+      if (existing.rowCount === 1) {
+        const upload = existing.rows[0];
+        if (upload.expected_mime_type !== input.mime_type ||
+            Number(upload.expected_size_bytes) !== input.size_bytes ||
+            upload.expected_checksum_sha256 !== input.checksum_sha256.toLowerCase()) {
+          throw new ConflictException('Idempotency key was already used with different upload metadata');
+        }
+        if (upload.status !== 'PENDING' || new Date(upload.expires_at).getTime() <= Date.now()) {
+          throw new ConflictException('Idempotent upload is no longer pending; use a new idempotency key');
+        }
+        const signed = await this.storage.presignPhoto({
+          key: upload.object_key, mimeType: input.mime_type, checksum: input.checksum_sha256.toLowerCase(),
+        });
+        return { upload_id: upload.id, ...signed, expires_at: new Date(upload.expires_at).toISOString() };
+      }
+
+      const pending = await client.query(
+        `SELECT id FROM equipment_photo_uploads
+         WHERE tenant_id = $1 AND equipment_id = $2 AND photo_type = 'INITIAL' AND status = 'PENDING'
+         LIMIT 1`,
+        [tenantId, equipmentId],
+      );
+      if (pending.rowCount === 1) throw new ConflictException('An initial photo upload is already pending for this equipment');
+
       const uploadId = randomUUID();
       const objectKey = `tenants/${tenantId}/equipment/${equipmentId}/initial/${uploadId}`;
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
       await client.query(
         `INSERT INTO equipment_photo_uploads
-          (id, tenant_id, equipment_id, object_key, mime_type, size_bytes, checksum_sha256, expires_at, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [uploadId, tenantId, equipmentId, objectKey, input.mime_type, input.size_bytes,
-          input.checksum_sha256.toLowerCase(), expiresAt, userId],
+          (id, tenant_id, equipment_id, initiated_by, photo_type, object_key, idempotency_key,
+           expected_mime_type, expected_size_bytes, expected_checksum_sha256, status, expires_at)
+         VALUES ($1,$2,$3,$4,'INITIAL',$5,$6,$7,$8,$9,'PENDING',$10)`,
+        [uploadId, tenantId, equipmentId, userId, objectKey, input.idempotency_key,
+          input.mime_type, input.size_bytes, input.checksum_sha256.toLowerCase(), expiresAt],
       );
       const signed = await this.storage.presignPhoto({
         key: objectKey, mimeType: input.mime_type, checksum: input.checksum_sha256.toLowerCase(),
@@ -98,9 +134,9 @@ export class EquipmentService {
   async completeInitialPhotoUpload(tenantId: string, userId: string, equipmentId: string, uploadId: string) {
     return this.db.withTenant(tenantId, async client => {
       const result = await client.query(
-        `SELECT id, object_key, mime_type, size_bytes, checksum_sha256, status, expires_at
+        `SELECT id, object_key, expected_mime_type, expected_size_bytes, expected_checksum_sha256, status, expires_at
          FROM equipment_photo_uploads
-         WHERE id = $1 AND equipment_id = $2 AND tenant_id = $3
+         WHERE id = $1 AND equipment_id = $2 AND tenant_id = $3 AND photo_type = 'INITIAL'
          FOR UPDATE`,
         [uploadId, equipmentId, tenantId],
       );
@@ -110,11 +146,11 @@ export class EquipmentService {
         throw new BadRequestException('Photo upload is expired or already completed');
       }
       const head = await this.storage.headObject(upload.object_key);
-      if (Number(head.ContentLength) !== Number(upload.size_bytes) ||
-          head.ContentType !== upload.mime_type ||
-          head.Metadata?.sha256 !== upload.checksum_sha256 ||
-          head.ChecksumSHA256 !== Buffer.from(upload.checksum_sha256, 'hex').toString('base64')) {
-        throw new BadRequestException('Uploaded object does not match the declared size, MIME type and checksum metadata');
+      if (Number(head.ContentLength) !== Number(upload.expected_size_bytes) ||
+          head.ContentType !== upload.expected_mime_type ||
+          head.Metadata?.sha256 !== upload.expected_checksum_sha256 ||
+          head.ChecksumSHA256 !== Buffer.from(upload.expected_checksum_sha256, 'hex').toString('base64')) {
+        throw new BadRequestException('Uploaded object does not match the declared size, MIME type and SHA-256 checksum');
       }
       const equipment = await client.query(
         "SELECT id, status FROM equipment WHERE id = $1 FOR UPDATE",
@@ -123,21 +159,24 @@ export class EquipmentService {
       if (equipment.rowCount !== 1 || equipment.rows[0].status !== 'PENDING_PHOTO') {
         throw new BadRequestException('Equipment is not waiting for its initial photo');
       }
-      await client.query(
+      const photo = await client.query(
         `INSERT INTO equipment_photos
           (tenant_id, equipment_id, object_key, photo_type, captured_at, uploaded_by, checksum_sha256)
-         VALUES ($1,$2,$3,'INITIAL',now(),$4,$5)`,
-        [tenantId, equipmentId, upload.object_key, userId, upload.checksum_sha256],
+         VALUES ($1,$2,$3,'INITIAL',now(),$4,$5)
+         RETURNING id`,
+        [tenantId, equipmentId, upload.object_key, userId, upload.expected_checksum_sha256],
       );
       await client.query(
         "UPDATE equipment SET status = 'ACTIVE', updated_at = now() WHERE tenant_id = $1 AND id = $2",
         [tenantId, equipmentId],
       );
       await client.query(
-        "UPDATE equipment_photo_uploads SET status = 'COMPLETED', completed_at = now() WHERE tenant_id = $1 AND id = $2",
-        [tenantId, uploadId],
+        `UPDATE equipment_photo_uploads
+         SET status = 'COMPLETED', completed_photo_id = $1, updated_at = now()
+         WHERE tenant_id = $2 AND id = $3`,
+        [photo.rows[0].id, tenantId, uploadId],
       );
-      return { equipment_id: equipmentId, status: 'ACTIVE', initial_photo: 'SAVED' };
+      return { equipment_id: equipmentId, status: 'ACTIVE', initial_photo_id: photo.rows[0].id };
     });
   }
 
