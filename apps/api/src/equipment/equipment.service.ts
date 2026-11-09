@@ -112,7 +112,8 @@ export class EquipmentService {
       const head = await this.storage.headObject(upload.object_key);
       if (Number(head.ContentLength) !== Number(upload.size_bytes) ||
           head.ContentType !== upload.mime_type ||
-          head.Metadata?.sha256 !== upload.checksum_sha256) {
+          head.Metadata?.sha256 !== upload.checksum_sha256 ||
+          head.ChecksumSHA256 !== Buffer.from(upload.checksum_sha256, 'hex').toString('base64')) {
         throw new BadRequestException('Uploaded object does not match the declared size, MIME type and checksum metadata');
       }
       const equipment = await client.query(
