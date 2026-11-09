@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Req, Res, UseGuards } from '@nestjs/common';
-import { Response } from 'express';
-import PDFDocument from 'pdfkit';
+import type { Response } from 'express';
+import PDFDocument = require('pdfkit');
 import * as QRCode from 'qrcode';
 import { TenantAuthGuard } from '../auth/tenant-auth.guard';
 import { AuthenticatedUser } from '../auth/auth.types';
@@ -59,12 +59,10 @@ export class EquipmentController {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
     });
-    doc.fontSize(10).text('FIRECONTROL 360', { align: 'center' });
-    doc.moveDown(0.5);
-    doc.image(qrPng, 25, 40, { fit: [148, 148], align: 'center' });
-    doc.moveDown(9);
-    doc.fontSize(12).text(String(item.asset_code), { align: 'center' });
-    doc.fontSize(8).text('Escanea el QR e inicia sesión para consultar el expediente.', { align: 'center' });
+    doc.fontSize(10).text('FIRECONTROL 360', 12, 12, { align: 'center', width: 174 });
+    doc.image(qrPng, 25, 34, { fit: [148, 148], align: 'center' });
+    doc.fontSize(12).text(String(item.asset_code), 12, 190, { align: 'center', width: 174 });
+    doc.fontSize(8).text('Escanea el QR e inicia sesión para consultar el expediente.', 12, 211, { align: 'center', width: 174 });
     doc.end();
     const pdf = await completed;
     response.setHeader('Content-Type', 'application/pdf');
