@@ -1,6 +1,6 @@
 # FireControl 360 — Vertical integration MVP
 
-SaaS multiempresa para inventario e inspección de sistemas contra incendios. Esta rama contiene el starter y la primera integración vertical de API.
+SaaS multiempresa para inventario e inspección de sistemas contra incendios. Esta rama contiene el starter y la primera implementación de API para el flujo vertical.
 
 ## Stack
 - API: NestJS 10 + TypeScript.
@@ -17,15 +17,11 @@ SaaS multiempresa para inventario e inspección de sistemas contra incendios. Es
 
 El SQL de `db/init/001_schema.sql` se ejecuta automáticamente solo cuando PostgreSQL inicializa un volumen vacío. No lo ejecutes sobre una base existente.
 
-## Migración de integración vertical
-El archivo `db/migrations/0002_vertical_integration.sql` agrega:
-- Identidades de Super Admin.
-- Invitaciones de administrador con token SHA-256, expiración y aceptación de un solo uso.
-- Outbox de notificaciones con payload cifrado (el worker de correo aún está pendiente).
-- Sesiones de carga de fotografía inicial e idempotencia.
-- Estado `PENDING_PHOTO` y políticas RLS.
+## Migraciones de base de datos
+- La migración `0002_vertical_integration.sql` fue preparada y el usuario indicó que ya la ejecutó en su PostgreSQL. Su SQL fuente exacto aún debe incorporarse a este repositorio para que la API se pueda validar contra las columnas reales. **No se debe recrear, sustituir ni volver a ejecutar esa migración.**
+- `db/migrations/0003_platform_identity_and_evidence_guards.sql` agrega la identidad independiente de Super Admin y reglas de inmutabilidad de evidencia/activación. Está versionada, pero no fue ejecutada por este trabajo.
 
-**La migración está versionada en GitHub, pero no se ejecuta automáticamente ni fue aplicada por este código.** Antes de aplicarla en una base existente, compara su contenido con el SQL que ya ejecutaste y verifica el estado real de las tablas. No ejecutes dos veces scripts distintos con el mismo número de migración.
+Antes de ejecutar `0003`, compara el esquema real y confirma que las restricciones y triggers no existan ya. Las migraciones no se ejecutan automáticamente al iniciar la API.
 
 ## Roles y conexiones PostgreSQL
 Configura dos conexiones distintas:
@@ -39,7 +35,7 @@ SELECT set_config('app.tenant_id', '<tenant-id-del-JWT>', true);
 No aceptes `tenant_id` desde el cuerpo de una petición para autorizar acceso.
 
 ## Bootstrap del primer Super Admin
-Después de aplicar la migración con un rol de migraciones controlado, ejecuta el bootstrap una sola vez desde `apps/api` con estas variables de entorno configuradas en el servidor/terminal:
+Después de confirmar que existen las tablas requeridas, ejecuta el bootstrap una sola vez desde `apps/api` con estas variables de entorno configuradas de forma segura:
 - `PROVISIONING_DATABASE_URL`
 - `PLATFORM_ADMIN_EMAIL`
 - `PLATFORM_ADMIN_NAME`
@@ -58,6 +54,7 @@ Todas las rutas llevan prefijo `/api/v1`.
 | POST | `/platform/tenants` | Aprovisionar empresa y administrador inicial |
 | POST | `/invitations/accept` | Aceptar invitación y definir contraseña |
 | POST | `/auth/login` | Inicio de sesión de usuario tenant |
+| GET | `/auth/me` | Validar sesión y consultar tenant/roles |
 | GET | `/equipment/catalog` | Catálogo de sucursales y tipos |
 | POST | `/equipment` | Registrar equipo como `PENDING_PHOTO` |
 | POST | `/equipment/:id/initial-photo/upload` | Crear URL firmada de carga |
@@ -66,7 +63,7 @@ Todas las rutas llevan prefijo `/api/v1`.
 | GET | `/equipment/:id/label.pdf` | Descargar etiqueta QR |
 | GET | `/equipment/qr/:token` | Consultar expediente con sesión y tenant válidos |
 
-La invitación se entrega como token de un solo uso en la respuesta de aprovisionamiento para compartirlo manualmente por un canal seguro. La pantalla web de aceptación y el envío automático de correo todavía no están implementados. El outbox está preparado para esa siguiente etapa.
+La invitación se entrega como token de un solo uso en la respuesta de aprovisionamiento para compartirlo manualmente por un canal seguro. La pantalla web de aceptación y el envío automático de correo todavía no están implementados. El outbox de la migración 0002 está reservado para esa siguiente etapa.
 
 ## Flujo de fotografía
 1. El administrador registra el equipo; queda en `PENDING_PHOTO`.
@@ -79,7 +76,8 @@ La invitación se entrega como token de un solo uso en la respuesta de aprovisio
 El bucket debe permanecer privado. Configura CORS del bucket para permitir PUT únicamente desde los orígenes web autorizados; no hagas público el bucket. La URL firmada expira en 10 minutos y el límite de foto es 10 MB.
 
 ## Pendiente antes de producción
-- Comparar y aplicar migración con control de versiones en la base destino.
+- Incorporar el SQL exacto de la migración 0002 ya aplicada y alinear nombres/estados de columnas con la API.
+- Aplicar y validar 0003 con control de versiones en la base destino.
 - Bootstrap seguro de roles PostgreSQL y verificación real de RLS.
 - Worker/outbox y proveedor de correo; interfaz web de invitación.
 - Antivirus/decodificación de imagen y validación real del archivo (no solo MIME declarado).
