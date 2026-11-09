@@ -32,6 +32,7 @@ export class TenantProvisioningService {
         [legalName, input.trade_name?.trim() || null, input.tax_id?.trim() || null],
       );
       const tenantId = tenantResult.rows[0].id as string;
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
 
       const roleResult = await client.query(
         `INSERT INTO roles (tenant_id, code, name)
