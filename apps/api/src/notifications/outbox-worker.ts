@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import 'reflect-metadata';
 import { Pool } from 'pg';
 import nodemailer from 'nodemailer';
