@@ -78,17 +78,16 @@ export class TenantProvisioningService {
       );
       await client.query(
         `INSERT INTO user_invitations
-          (tenant_id, email, full_name, role_id, token_hash, expires_at, created_by_platform_admin_id)
-         VALUES ($1, $2, $3, $4, $5, now() + interval '48 hours', $6)`,
-        [tenantId, adminEmail, adminFullName, roleId, tokenHash, platformAdminId],
+          (tenant_id, email, role_id, token_hash, status, expires_at, created_by_platform_admin_id)
+         VALUES ($1, $2, $3, $4, 'PENDING', now() + interval '48 hours', $5)`,
+        [tenantId, adminEmail, roleId, tokenHash, platformAdminId],
       );
       return tenantResult.rows[0];
     });
 
-    const baseUrl = (process.env.WEB_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
     return {
       tenant,
-      administrator: { email: adminEmail, status: 'INVITED', role: 'TENANT_ADMIN' },
+      administrator: { email: adminEmail, full_name: adminFullName, status: 'INVITED', role: 'TENANT_ADMIN' },
       invitation: {
         token: rawToken,
         acceptance_endpoint: 'POST /api/v1/invitations/accept',
