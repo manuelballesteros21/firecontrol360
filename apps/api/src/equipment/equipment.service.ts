@@ -181,6 +181,11 @@ export class EquipmentService {
          WHERE tenant_id = $2 AND id = $3`,
         [photo.rows[0].id, tenantId, uploadId],
       );
+      await client.query(
+        `INSERT INTO audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, after_data)
+         VALUES ($1,$2,'EQUIPMENT_INITIAL_PHOTO_UPLOADED','EQUIPMENT',$3,$4::jsonb)`,
+        [tenantId, userId, equipmentId, JSON.stringify({ photo_id: photo.rows[0].id, status: 'ACTIVE' })],
+      );
       return { equipment_id: equipmentId, status: 'ACTIVE', initial_photo_id: photo.rows[0].id };
     });
   }
