@@ -1,6 +1,5 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
@@ -26,10 +25,12 @@ export class StorageService {
 
   async presignPhoto(input: { key: string; mimeType: string; checksum: string }) {
     try {
+      const checksumBase64 = Buffer.from(input.checksum, 'hex').toString('base64');
       const command = new PutObjectCommand({
         Bucket: this.bucket,
         Key: input.key,
         ContentType: input.mimeType,
+        ChecksumSHA256: checksumBase64,
         Metadata: { sha256: input.checksum },
       });
       const uploadUrl = await getSignedUrl(this.client, command, { expiresIn: 600 });
@@ -37,6 +38,7 @@ export class StorageService {
         upload_url: uploadUrl,
         required_headers: {
           'Content-Type': input.mimeType,
+          'x-amz-checksum-sha256': checksumBase64,
           'x-amz-meta-sha256': input.checksum,
         },
       };
@@ -46,6 +48,10 @@ export class StorageService {
   }
 
   async headObject(key: string) {
-    return this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+    return this.client.send(new HeadObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      ChecksumMode: 'ENABLED',
+    }));
   }
 }
