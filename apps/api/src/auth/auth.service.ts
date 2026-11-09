@@ -71,6 +71,7 @@ export class AuthService {
       );
       if (locked.rowCount !== 1) throw new BadRequestException('Invitation is no longer valid');
       const row = locked.rows[0];
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [row.tenant_id]);
       const userResult = await client.query(
         `UPDATE users SET password_hash = $1, status = 'ACTIVE', updated_at = now()
          WHERE tenant_id = $2 AND email = $3 AND status = 'INVITED'
