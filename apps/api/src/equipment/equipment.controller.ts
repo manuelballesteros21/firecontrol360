@@ -32,7 +32,7 @@ export class EquipmentController {
 
   @Post(':id/initial-photo/upload')
   createPhotoUpload(@Req() req: { user: AuthenticatedUser }, @Param('id') id: string, @Body() body: {
-    mime_type: string; size_bytes: number; checksum_sha256: string;
+    mime_type: string; size_bytes: number; checksum_sha256: string; idempotency_key: string;
   }) {
     return this.equipment.createInitialPhotoUpload(req.user.tenantId, req.user.sub, id, body);
   }
