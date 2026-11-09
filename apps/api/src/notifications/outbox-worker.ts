@@ -24,7 +24,7 @@ async function deliverOne(): Promise<boolean> {
        WHERE (status = 'PENDING' AND available_at <= now())
           OR (status = 'PROCESSING' AND locked_until < now())
        ORDER BY available_at, created_at
-       FOR UPDATE SKIP LOCKED LIMIT 1`,
+       LIMIT 1 FOR UPDATE SKIP LOCKED`,
     );
     if (!claimed.rowCount) { await client.query('COMMIT'); return false; }
     row = claimed.rows[0];
