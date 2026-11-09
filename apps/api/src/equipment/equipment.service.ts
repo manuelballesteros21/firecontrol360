@@ -37,6 +37,11 @@ export class EquipmentService {
           input.asset_code.trim(), input.manufacturer?.trim() ?? null, input.model?.trim() ?? null,
           input.serial_number?.trim() ?? null, input.capacity?.trim() ?? null, userId],
       );
+      await client.query(
+        `INSERT INTO audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, after_data)
+         VALUES ($1,$2,'EQUIPMENT_CREATED','EQUIPMENT',$3,$4::jsonb)`,
+        [tenantId, userId, result.rows[0].id, JSON.stringify(result.rows[0])],
+      );
       return { equipment: result.rows[0], next_step: 'UPLOAD_INITIAL_PHOTO' };
     });
   }
