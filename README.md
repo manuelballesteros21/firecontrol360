@@ -63,7 +63,7 @@ Todas las rutas llevan prefijo `/api/v1`.
 | GET | `/equipment/:id/label.pdf` | Descargar etiqueta QR |
 | GET | `/equipment/qr/:token` | Consultar expediente con sesión y tenant válidos |
 
-La invitación se entrega como token de un solo uso en la respuesta de aprovisionamiento para compartirlo manualmente por un canal seguro. La pantalla web de aceptación y el envío automático de correo todavía no están implementados. El outbox de la migración 0002 está reservado para esa siguiente etapa.
+La invitación se encola en `notification_outbox` dentro de la misma transacción que aprovisiona la empresa. El payload del correo se cifra con AES-256-GCM; el token no se almacena en claro ni se devuelve en la respuesta de aprovisionamiento. La pantalla web está disponible en `/accept-invitation?token=...` y el inventario en `/`. El worker SMTP se ejecuta con `npm run worker:outbox` desde `apps/api`.
 
 ## Flujo de fotografía
 1. El administrador registra el equipo; queda en `PENDING_PHOTO`.
@@ -75,14 +75,14 @@ La invitación se entrega como token de un solo uso en la respuesta de aprovisio
 
 El bucket debe permanecer privado. Configura CORS del bucket para permitir PUT únicamente desde los orígenes web autorizados; no hagas público el bucket. La URL firmada expira en 10 minutos y el límite de foto es 10 MB.
 
-## Pendiente antes de producción
+## Web, correo y pruebas\n- Web: `cd apps/web && npm install && cp .env.example .env.local && npm run dev`. Define `NEXT_PUBLIC_API_URL` para apuntar a la API.\n- Aceptación: el administrador invitado abre el enlace recibido, define una contraseña de al menos 12 caracteres y la API activa la cuenta. El token es de un solo uso y expira a las 48 horas.\n- Correo: configura `OUTBOX_ENCRYPTION_KEY` (32 bytes en Base64; `openssl rand -base64 32`) y variables SMTP. Ejecuta `cd apps/api && npm run worker:outbox` como proceso independiente. El worker usa `FOR UPDATE SKIP LOCKED`, reintentos exponenciales y estado terminal `FAILED`. Supervisa `notification_outbox` y los errores SMTP.\n- Pruebas de aislamiento: `npm run test:isolation` requiere una base de pruebas con migraciones reales aplicadas, un rol runtime sin `BYPASSRLS`, y variables `DATABASE_URL`, `TENANT_A_ID`, `TENANT_B_ID`, `EQUIPMENT_B_ID`. La prueba verifica lectura/escritura cruzada y que el contexto tenant no se filtre entre transacciones.\n- CI: `.github/workflows/ci.yml` compila API/web y ejecuta la suite de aislamiento; sin secretos/fixtures de base, la prueba de integración queda omitida (skipped), no aprobada.\n\n## Pendiente antes de producción
 - Incorporar el SQL exacto de la migración 0002 ya aplicada y alinear nombres/estados de columnas con la API.
 - Aplicar y validar 0003 con control de versiones en la base destino.
 - Bootstrap seguro de roles PostgreSQL y verificación real de RLS.
-- Worker/outbox y proveedor de correo; interfaz web de invitación.
+- Confirmar el SQL exacto de 0002 y los valores CHECK de `notification_outbox` contra el esquema real; no se ha ejecutado una prueba de entrega SMTP.
 - Antivirus/decodificación de imagen y validación real del archivo (no solo MIME declarado).
 - CORS de bucket, lifecycle/retención, cifrado y backups.
-- Rate limiting, refresh/revocación de sesiones, MFA, auditoría y pruebas automatizadas.
+- Rate limiting, refresh/revocación de sesiones, MFA, auditoría ampliada y pruebas automatizadas en entorno PostgreSQL real.
 - Pruebas de integración en PostgreSQL/MinIO reales y prueba negativa de aislamiento entre dos tenants.
 
 Este MVP es una base de desarrollo, no un sistema productivo ni una certificación normativa. Las referencias normativas deben validarse por personal competente antes de emitir dictámenes o declaraciones de cumplimiento.
