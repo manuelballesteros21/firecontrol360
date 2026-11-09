@@ -73,6 +73,11 @@ export class TenantProvisioningService {
       );
       const userId = userResult.rows[0].id as string;
       await client.query(
+        `INSERT INTO audit_logs (tenant_id, actor_user_id, action, entity_type, entity_id, after_data)
+         VALUES ($1, NULL, 'TENANT_PROVISIONED', 'TENANT', $1, $2::jsonb)`,
+        [tenantId, JSON.stringify({ legal_name: legalName, administrator_email: adminEmail })],
+      );
+      await client.query(
         'INSERT INTO user_roles (tenant_id, user_id, role_id) VALUES ($1, $2, $3)',
         [tenantId, userId, roleId],
       );
