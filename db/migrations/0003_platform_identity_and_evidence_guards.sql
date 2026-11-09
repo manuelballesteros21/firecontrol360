@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS platform_admins (
   last_login_at TIMESTAMPTZ
 );
 
+ALTER TABLE user_invitations
+  ADD COLUMN IF NOT EXISTS created_by_platform_admin_id UUID
+  REFERENCES platform_admins(id);
+
 DO $$
 BEGIN
   ALTER TABLE equipment DROP CONSTRAINT IF EXISTS equipment_status_check;
